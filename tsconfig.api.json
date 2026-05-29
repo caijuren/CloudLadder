@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "outDir": "api/dist",
+    "rootDir": "api",
+    "declaration": false,
+    "sourceMap": true,
+    "forceConsistentCasingInFileNames": false,
+    "verbatimModuleSyntax": false
+  },
+  "include": ["api"]
+}
