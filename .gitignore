@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Upload files
+uploads/
+
 # SQLite database files
 data/*.db
 data/*.db-shm
