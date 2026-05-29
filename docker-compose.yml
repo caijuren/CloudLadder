@@ -7,10 +7,13 @@ services:
       dockerfile: Dockerfile
     container_name: cloudladder
     ports:
-      - "3001:3001"
+      - "${APP_BIND_HOST:-127.0.0.1}:${APP_HOST_PORT:-3101}:3001"
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - DB_PATH=/app/data/cloudladder.db
       - JWT_SECRET=${JWT_SECRET:-cloudladder-prod-jwt-secret-2026}
     volumes:
       # Persist SQLite database

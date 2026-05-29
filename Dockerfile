@@ -3,6 +3,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+RUN apk add --no-cache python3 make g++
+
 # Install pnpm
 RUN npm install -g pnpm
 
@@ -24,6 +26,8 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
+RUN apk add --no-cache python3 make g++
+
 # Install pnpm
 RUN npm install -g pnpm
 
@@ -39,10 +43,6 @@ RUN pnpm rebuild better-sqlite3
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/api/dist ./api/dist
-COPY --from=builder /app/data ./data
-
-# Copy necessary runtime files
-COPY .env ./
 
 # Create uploads directory
 RUN mkdir -p uploads

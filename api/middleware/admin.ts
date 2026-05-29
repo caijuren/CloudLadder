@@ -1,4 +1,4 @@
-import { authMiddleware, type JwtPayload } from './auth'
+import { authMiddleware, type JwtPayload } from './auth.js'
 import { Response, NextFunction } from 'express'
 
 export interface AuthRequest {

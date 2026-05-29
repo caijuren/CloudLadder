@@ -1,5 +1,7 @@
 node_modules
 dist
+data
+uploads
 .git
 .vscode
 .idea
@@ -10,6 +12,7 @@ yarn-error.log*
 pnpm-debug.log*
 .DS_Store
 *.local
+.env
 .vite
 *.md
-!.env
+!README.md
