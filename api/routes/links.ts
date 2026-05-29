@@ -5,13 +5,15 @@ import { authMiddleware } from '../middleware/auth.js'
 const router = Router()
 router.use(authMiddleware)
 
+const LINK_FIELDS = 'id, title AS name, url, department, region, category, description AS notes, created_at'
+
 router.get('/', (req: Request, res: Response): void => {
   try {
     const db = getDb()
     const userId = req.user!.userId
     const { search, department, region, category } = req.query
 
-    let sql = 'SELECT * FROM resource_links WHERE user_id = ?'
+    let sql = `SELECT ${LINK_FIELDS} FROM resource_links WHERE user_id = ?`
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const params: any[] = [userId]
 
@@ -46,9 +48,12 @@ router.post('/', (req: Request, res: Response): void => {
   try {
     const db = getDb()
     const userId = req.user!.userId
-    const { title, url, department, region, category, description } = req.body
+    const { name, title, url, department, region, category, notes, description } = req.body
 
-    if (!title?.trim()) {
+    const linkName = (name || title || '').trim()
+    const linkNotes = notes || description || ''
+
+    if (!linkName) {
       res.status(400).json({ success: false, message: '请输入网站名称' })
       return
     }
@@ -60,9 +65,9 @@ router.post('/', (req: Request, res: Response): void => {
     const result = db.prepare(`
       INSERT INTO resource_links (user_id, title, url, department, region, category, description)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, title.trim(), url.trim(), department || '', region || '', category || '', description || '')
+    `).run(userId, linkName, url.trim(), department || '', region || '', category || '', linkNotes)
 
-    const row = db.prepare('SELECT * FROM resource_links WHERE id = ?').get(result.lastInsertRowid)
+    const row = db.prepare(`SELECT ${LINK_FIELDS} FROM resource_links WHERE id = ?`).get(result.lastInsertRowid)
     res.json({ success: true, data: row })
   } catch {
     res.status(500).json({ success: false, message: '添加失败' })
@@ -74,7 +79,7 @@ router.put('/:id', (req: Request, res: Response): void => {
     const db = getDb()
     const userId = req.user!.userId
     const { id } = req.params
-    const { title, url, department, region, category, description } = req.body
+    const { name, title, url, department, region, category, notes, description } = req.body
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = db.prepare('SELECT * FROM resource_links WHERE id = ? AND user_id = ?').get(id, userId) as any
@@ -83,21 +88,24 @@ router.put('/:id', (req: Request, res: Response): void => {
       return
     }
 
+    const linkName = (name || title || '').trim() || existing.title
+    const linkNotes = (notes || description) ?? existing.description
+
     db.prepare(`
       UPDATE resource_links SET title = ?, url = ?, department = ?, region = ?, category = ?, description = ?
       WHERE id = ? AND user_id = ?
     `).run(
-      title?.trim() ?? existing.title,
+      linkName,
       url?.trim() ?? existing.url,
       department ?? existing.department,
       region ?? existing.region,
       category ?? existing.category,
-      description ?? existing.description,
+      linkNotes,
       id,
       userId
     )
 
-    const row = db.prepare('SELECT * FROM resource_links WHERE id = ?').get(id)
+    const row = db.prepare(`SELECT ${LINK_FIELDS} FROM resource_links WHERE id = ?`).get(id)
     res.json({ success: true, data: row })
   } catch {
     res.status(500).json({ success: false, message: '更新失败' })
