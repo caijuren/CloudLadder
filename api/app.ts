@@ -19,6 +19,7 @@ import crawlerRoutes from './routes/crawler.js'
 import subscriptionRoutes from './routes/subscriptions.js'
 import uploadRoutes from './routes/upload.js'
 import linksRoutes from './routes/links.js'
+import docCategoryRoutes from './routes/docCategories.js'
 
 dotenv.config()
 
@@ -56,6 +57,7 @@ app.use('/api/crawler', crawlerRoutes)
 app.use('/api/subscriptions', subscriptionRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/links', linksRoutes)
+app.use('/api/company/doc-categories', docCategoryRoutes)
 
 app.use(
   '/api/health',

@@ -312,6 +312,20 @@ export function initDb(): void {
   try { database.exec("ALTER TABLE company_documents ADD COLUMN file_original_name TEXT DEFAULT ''") } catch { /* ignore */ }
   try { database.exec("ALTER TABLE company_documents ADD COLUMN file_size INTEGER DEFAULT 0") } catch { /* ignore */ }
 
+  // Document categories table (customizable)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS doc_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      category_value TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+      UNIQUE(company_id, category_value)
+    )
+  `)
+
   // Resource links table
   database.exec(`
     CREATE TABLE IF NOT EXISTS resource_links (
@@ -538,6 +552,28 @@ export function initDb(): void {
       }
     })
     insertLinks(links)
+
+    // Seed default document categories for admin's company
+    if (adminUser) {
+      const companyMember = database.prepare('SELECT company_id FROM company_members WHERE user_id = ?').get(adminUser.id) as { company_id: number } | undefined
+      if (companyMember) {
+        const catCount = database.prepare('SELECT COUNT(*) AS count FROM doc_categories WHERE company_id = ?').get(companyMember.company_id) as { count: number }
+        if (catCount.count === 0) {
+          const insertCat = database.prepare(`
+            INSERT INTO doc_categories (company_id, name, category_value, sort_order)
+            VALUES (?, ?, ?, ?)
+          `)
+          const defaultCats = [
+            { name: '资质证照', category_value: 'certificate', sort_order: 0 },
+            { name: '财务资料', category_value: 'financial', sort_order: 1 },
+            { name: '合同协议', category_value: 'contract', sort_order: 2 },
+          ]
+          for (const cat of defaultCats) {
+            insertCat.run(companyMember.company_id, cat.name, cat.category_value, cat.sort_order)
+          }
+        }
+      }
+    }
 
     console.log('[DB] Seed data inserted successfully')
   }

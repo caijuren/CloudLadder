@@ -1,9 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import {
   Building2,
-  FileCheck,
   FileText,
-  FileSignature,
   Users,
   Plus,
   X,
@@ -13,27 +11,21 @@ import {
   Download,
   Search,
   Loader2,
+  Settings,
+  PencilLine,
+  Trash2,
+  Check,
 } from 'lucide-react'
 import { useCompanyStore, useDocumentStore } from '@/lib/store'
 import { apiFetch } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/Toast'
 
-const tabs = [
-  { key: 'basic', label: '基本信息', icon: Building2 },
-  { key: 'certificates', label: '资质证照', icon: FileCheck },
-  { key: 'financial', label: '财务资料', icon: FileText },
-  { key: 'contracts', label: '合同协议', icon: FileSignature },
-  { key: 'team', label: '团队成员', icon: Users },
-]
-
-function getDocCategory(key: string): string {
-  const map: Record<string, string> = {
-    certificates: 'certificate',
-    financial: 'financial',
-    contracts: 'contract',
-  }
-  return map[key] || 'other'
+interface DocCategory {
+  id: number
+  name: string
+  category_value: string
+  sort_order: number
 }
 
 const regionOptions = [
@@ -72,9 +64,19 @@ const educationOptions = [
   { value: '', label: '其他' },
 ]
 
+const fixedTabs = [
+  { key: 'basic', label: '基本信息', icon: Building2 },
+  { key: 'team', label: '团队成员', icon: Users },
+]
+
 export default function CompanyProfile() {
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState('basic')
+  const [categories, setCategories] = useState<DocCategory[]>([])
+  const [showCatModal, setShowCatModal] = useState(false)
+  const [catForm, setCatForm] = useState({ name: '', category_value: '' })
+  const [editingCatId, setEditingCatId] = useState<number | null>(null)
+  const [editingCatName, setEditingCatName] = useState('')
   const { profile, fetchProfile, updateProfile } = useCompanyStore()
   const { list: documents, loading: docLoading, fetchDocuments, addDocument, deleteDocument } = useDocumentStore()
   const [teamMembers, setTeamMembers] = useState<Array<{ id: number; name?: string; position?: string; education?: string; title?: string; major?: string; socialSecurityStatus?: string; joinDate?: string; phone?: string; email?: string }>>([])
@@ -91,11 +93,27 @@ export default function CompanyProfile() {
   const [fetching, setFetching] = useState(false)
   const [showAutoFill, setShowAutoFill] = useState(false)
 
-  const isDocTab = activeTab === 'certificates' || activeTab === 'financial' || activeTab === 'contracts'
+  const isDocTab = categories.some((c) => c.category_value === activeTab)
+
+  const docTabs = useMemo(() =>
+    categories.map((c) => ({ key: c.category_value, label: c.name })), [categories]
+  )
 
   useEffect(() => {
     fetchProfile()
+    fetchCategories()
   }, [fetchProfile])
+
+  const fetchCategories = async () => {
+    try {
+      const json = await apiFetch('/api/company/doc-categories')
+      if (json.success) {
+        setCategories(json.data || [])
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
     if (profile) {
@@ -119,8 +137,7 @@ export default function CompanyProfile() {
 
   useEffect(() => {
     if (isDocTab) {
-      const category = getDocCategory(activeTab)
-      fetchDocuments(category)
+      fetchDocuments(activeTab)
     }
   }, [activeTab, isDocTab, fetchDocuments])
 
@@ -169,7 +186,7 @@ export default function CompanyProfile() {
     if (!docForm.name?.trim()) return
     try {
       await addDocument({
-        category: getDocCategory(activeTab),
+        category: activeTab,
         name: docForm.name,
         docType: docForm.docType || '',
         docNumber: docForm.docNumber || '',
@@ -308,19 +325,65 @@ export default function CompanyProfile() {
     setFetching(false)
   }
 
+  const handleAddCategory = async () => {
+    if (!catForm.name.trim() || !catForm.category_value.trim()) return
+    try {
+      const json = await apiFetch('/api/company/doc-categories', {
+        method: 'POST',
+        body: JSON.stringify({ name: catForm.name, category_value: catForm.category_value }),
+      })
+      if (json.success) {
+        setCatForm({ name: '', category_value: '' })
+        await fetchCategories()
+        showToast('success', '分类已添加')
+      } else {
+        showToast('error', json.message || '添加失败')
+      }
+    } catch {
+      showToast('error', '添加分类失败')
+    }
+  }
+
+  const handleRenameCategory = async (id: number) => {
+    if (!editingCatName.trim()) return
+    try {
+      const json = await apiFetch(`/api/company/doc-categories/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: editingCatName }),
+      })
+      if (json.success) {
+        setEditingCatId(null)
+        setEditingCatName('')
+        await fetchCategories()
+        showToast('success', '分类已重命名')
+      } else {
+        showToast('error', json.message || '重命名失败')
+      }
+    } catch {
+      showToast('error', '重命名失败')
+    }
+  }
+
+  const handleDeleteCategory = async (id: number) => {
+    try {
+      const json = await apiFetch(`/api/company/doc-categories/${id}`, { method: 'DELETE' })
+      if (json.success) {
+        await fetchCategories()
+        showToast('success', '分类已删除')
+      } else {
+        showToast('error', json.message || '删除失败')
+      }
+    } catch {
+      showToast('error', '删除分类失败')
+    }
+  }
+
   const filteredDocs = useMemo(() => {
-    const category = getDocCategory(activeTab)
-    return documents.filter((d) => d.category === category)
+    return documents.filter((d) => d.category === activeTab)
   }, [documents, activeTab])
 
   const setFormField = (setter: React.Dispatch<React.SetStateAction<Record<string, string>>>, field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setter((prev) => ({ ...prev, [field]: e.target.value }))
-
-  const getTabCount = (tabKey: string) => {
-    if (tabKey === 'basic') return 1
-    if (tabKey === 'team') return teamMembers.length
-    return filteredDocs.length
-  }
 
   return (
     <div className="space-y-5 animate-fade-in-up">
@@ -332,9 +395,8 @@ export default function CompanyProfile() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          const count = getTabCount(tab.key)
+        {[...fixedTabs, ...docTabs].map((tab) => {
+          const count = tab.key === 'basic' ? 1 : tab.key === 'team' ? teamMembers.length : filteredDocs.length
           return (
             <button
               key={tab.key}
@@ -346,10 +408,6 @@ export default function CompanyProfile() {
                   : 'hover:shadow-md'
               )}
             >
-              <Icon size={18} className={cn(
-                'mx-auto mb-1.5',
-                activeTab === tab.key ? 'text-blue-600' : 'text-slate-400'
-              )} />
               <p className={cn(
                 'text-lg font-bold',
                 activeTab === tab.key ? 'text-blue-700' : 'text-slate-800'
@@ -362,7 +420,7 @@ export default function CompanyProfile() {
 
       {/* Tabs */}
       <div className="flex items-center gap-1 p-1 bg-slate-100/80 rounded-xl overflow-x-auto">
-        {tabs.map((tab) => {
+        {fixedTabs.map((tab) => {
           const Icon = tab.icon
           return (
             <button
@@ -380,6 +438,29 @@ export default function CompanyProfile() {
             </button>
           )
         })}
+        <div className="w-px h-5 bg-slate-200 mx-1" />
+        {docTabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap',
+              activeTab === tab.key
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+        <button
+          onClick={() => { setCatForm({ name: '', category_value: '' }); setShowCatModal(true) }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all whitespace-nowrap ml-auto"
+          title="管理分类"
+        >
+          <Settings size={14} />
+          管理分类
+        </button>
       </div>
 
       {/* Basic Info Tab */}
@@ -508,14 +589,12 @@ export default function CompanyProfile() {
         </div>
       )}
 
-      {/* Certificates / Financial / Contracts Tab */}
+      {/* Document Tabs */}
       {isDocTab && (
         <div className="card p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-sm font-semibold text-slate-800">
-              {activeTab === 'certificates' && '资质证照'}
-              {activeTab === 'financial' && '财务资料'}
-              {activeTab === 'contracts' && '合同协议'}
+              {categories.find((c) => c.category_value === activeTab)?.name || '文档'}
             </h3>
             <button onClick={() => { setDocForm({}); setShowDocModal(true) }} className="btn-primary text-sm gap-1.5">
               <Plus size={16} />
@@ -530,16 +609,10 @@ export default function CompanyProfile() {
           ) : filteredDocs.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3">
-                {activeTab === 'certificates' ? <FileCheck size={28} className="text-slate-300" /> :
-                 activeTab === 'financial' ? <FileText size={28} className="text-slate-300" /> :
-                 <FileSignature size={28} className="text-slate-300" />}
+                <FileText size={28} className="text-slate-300" />
               </div>
               <p className="text-sm text-slate-400">暂无记录</p>
-              <p className="text-xs text-slate-300 mt-1 mb-4">
-                {activeTab === 'certificates' && '添加营业执照、知识产权证书、资质认证等'}
-                {activeTab === 'financial' && '添加审计报告、纳税证明、财务报表等'}
-                {activeTab === 'contracts' && '添加销售合同、产学研协议等'}
-              </p>
+              <p className="text-xs text-slate-300 mt-1 mb-4">添加相关文档资料</p>
               <button onClick={() => { setDocForm({}); setShowDocModal(true) }} className="btn-ghost text-xs gap-1">
                 <Plus size={14} />
                 立即添加
@@ -663,79 +736,41 @@ export default function CompanyProfile() {
           <div className="modal-content bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-base font-semibold text-slate-800">
-                添加{activeTab === 'certificates' ? '资质证照' : activeTab === 'financial' ? '财务资料' : '合同'}
+                添加{categories.find((c) => c.category_value === activeTab)?.name || '文档'}
               </h3>
               <button onClick={() => setShowDocModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400" aria-label="关闭"><X size={18} /></button>
             </div>
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">名称 *</label>
-                <input type="text" value={docForm.name || ''} onChange={setFormField(setDocForm, 'name')} placeholder={
-                  activeTab === 'certificates' ? '如：营业执照、发明专利证书' :
-                  activeTab === 'financial' ? '如：2025年度审计报告' :
-                  '如：XX项目技术开发合同'
-                } className="input-field text-sm" />
+                <input type="text" value={docForm.name || ''} onChange={setFormField(setDocForm, 'name')} placeholder="请输入名称" className="input-field text-sm" />
               </div>
-              {activeTab === 'certificates' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">证书/编号</label>
-                    <input type="text" value={docForm.docNumber || ''} onChange={setFormField(setDocForm, 'docNumber')} className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">发证机关</label>
-                    <input type="text" value={docForm.issuingAuthority || ''} onChange={setFormField(setDocForm, 'issuingAuthority')} className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">颁发日期</label>
-                    <input type="date" value={docForm.grantDate || ''} onChange={setFormField(setDocForm, 'grantDate')} className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">有效期至</label>
-                    <input type="date" value={docForm.expiryDate || ''} onChange={setFormField(setDocForm, 'expiryDate')} className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">类型</label>
-                    <input type="text" value={docForm.docType || ''} onChange={setFormField(setDocForm, 'docType')} placeholder="如：发明专利/实用新型" className="input-field text-sm" />
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">编号</label>
+                  <input type="text" value={docForm.docNumber || ''} onChange={setFormField(setDocForm, 'docNumber')} className="input-field text-sm" />
                 </div>
-              )}
-              {activeTab === 'financial' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">年份/期间</label>
-                    <input type="text" value={docForm.docType || ''} onChange={setFormField(setDocForm, 'docType')} placeholder="如：2025年度" className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">出具单位</label>
-                    <input type="text" value={docForm.issuingAuthority || ''} onChange={setFormField(setDocForm, 'issuingAuthority')} className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">出具日期</label>
-                    <input type="date" value={docForm.grantDate || ''} onChange={setFormField(setDocForm, 'grantDate')} className="input-field text-sm" />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">发证/出具单位</label>
+                  <input type="text" value={docForm.issuingAuthority || ''} onChange={setFormField(setDocForm, 'issuingAuthority')} className="input-field text-sm" />
                 </div>
-              )}
-              {activeTab === 'contracts' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">合同金额</label>
-                    <input type="text" value={docForm.amount || ''} onChange={setFormField(setDocForm, 'amount')} placeholder="如：50万元" className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">合作方</label>
-                    <input type="text" value={docForm.counterparty || ''} onChange={setFormField(setDocForm, 'counterparty')} className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">签订日期</label>
-                    <input type="date" value={docForm.grantDate || ''} onChange={setFormField(setDocForm, 'grantDate')} className="input-field text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">合同类型</label>
-                    <input type="text" value={docForm.docType || ''} onChange={setFormField(setDocForm, 'docType')} placeholder="如：销售/技术开发/产学研" className="input-field text-sm" />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">日期</label>
+                  <input type="date" value={docForm.grantDate || ''} onChange={setFormField(setDocForm, 'grantDate')} className="input-field text-sm" />
                 </div>
-              )}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">有效期至</label>
+                  <input type="date" value={docForm.expiryDate || ''} onChange={setFormField(setDocForm, 'expiryDate')} className="input-field text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">金额</label>
+                  <input type="text" value={docForm.amount || ''} onChange={setFormField(setDocForm, 'amount')} placeholder="如：50万元" className="input-field text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">合作方</label>
+                  <input type="text" value={docForm.counterparty || ''} onChange={setFormField(setDocForm, 'counterparty')} className="input-field text-sm" />
+                </div>
+              </div>
 
               {/* File upload */}
               <div>
@@ -829,6 +864,112 @@ export default function CompanyProfile() {
               <button onClick={handleAddTeam} disabled={!teamForm.name?.trim()} className="w-full btn-primary py-2.5 text-sm mt-2">
                 添加成员
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Management Modal */}
+      {showCatModal && (
+        <div className="modal-backdrop flex items-center justify-center p-4" onClick={() => setShowCatModal(false)}>
+          <div className="modal-content bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-semibold text-slate-800">管理文档分类</h3>
+              <button onClick={() => setShowCatModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400" aria-label="关闭"><X size={18} /></button>
+            </div>
+
+            {/* Existing categories */}
+            <div className="space-y-2 mb-5">
+              {categories.map((cat) => (
+                <div key={cat.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group">
+                  {editingCatId === cat.id ? (
+                    <div className="flex items-center gap-2 flex-1 mr-2">
+                      <input
+                        type="text"
+                        value={editingCatName}
+                        onChange={(e) => setEditingCatName(e.target.value)}
+                        className="input-field text-sm flex-1"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameCategory(cat.id)
+                          if (e.key === 'Escape') setEditingCatId(null)
+                        }}
+                      />
+                      <button onClick={() => handleRenameCategory(cat.id)} className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50" title="保存">
+                        <Check size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{cat.sort_order + 1}</span>
+                        <span className="text-sm font-medium text-slate-700">{cat.name}</span>
+                        <span className="text-[10px] text-slate-300">({cat.category_value})</span>
+                      </div>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name) }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50"
+                          title="重命名"
+                        >
+                          <PencilLine size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(cat.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50"
+                          title="删除"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+              {categories.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-4">暂无分类，请在下方添加</p>
+              )}
+            </div>
+
+            {/* Add new category */}
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-xs font-medium text-slate-600 mb-3">添加新分类</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">分类名称</label>
+                  <input
+                    type="text"
+                    value={catForm.name}
+                    onChange={(e) => setCatForm((prev) => ({
+                      ...prev,
+                      name: e.target.value,
+                      category_value: e.target.value
+                        ? e.target.value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_\u4e00-\u9fa5]/g, '')
+                        : '',
+                    }))}
+                    className="input-field text-sm"
+                    placeholder="如：知识产权证书"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">标识符（用于文档筛选，自动生成后也可手动修改）</label>
+                  <input
+                    type="text"
+                    value={catForm.category_value}
+                    onChange={(e) => setCatForm((prev) => ({ ...prev, category_value: e.target.value }))}
+                    className="input-field text-sm"
+                    placeholder="如：ip_certificate"
+                  />
+                </div>
+                <button
+                  onClick={handleAddCategory}
+                  disabled={!catForm.name.trim() || !catForm.category_value.trim()}
+                  className="w-full btn-primary py-2.5 text-sm"
+                >
+                  <Plus size={16} />
+                  添加分类
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -13,7 +13,7 @@
     "start": "node api/dist/server.js",
     "seed:links": "tsx api/scripts/seed-links.ts",
     "check": "tsc --noEmit",
-    "server:dev": "tsx watch api/server.ts",
+    "server:dev": "tsx watch --import dotenv/config api/server.ts",
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
   },
   "dependencies": {
